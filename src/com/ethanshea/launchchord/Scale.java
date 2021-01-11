@@ -1,65 +1,37 @@
 package com.ethanshea.launchchord;
 
 public class Scale {
-    private ScaleMode mode = ScaleMode.MAJOR;
-    private int key;
-
-    public Chord getDiatonicChord(int root) {
-	int degree = getDegree(root);
-	if (degree == -1)
-	    return new Chord(); // Not in the key
-	return new Chord(root, getRelativeNote(root, 2, degree), getRelativeNote(root, 4, degree));
+    private ScaleMode mode = ScaleMode.IONIAN;
+    private int key=0;
+    
+    public boolean isNoteScaleDegree(int note, int degree){
+	return getDegree(note) == degree;
+    }
+    
+    public int getDegree(int note){
+	return mode.getNoteScaleDegree(note-key);
+    }
+    
+    public int getShift(int degrees){
+	return mode.getShift(degrees);
     }
 
-    /**
-     * Get the next note relative to a given note
-     * 
-     * @param note The starting note to count from
-     * @param positions Number of positions away from the starting note. Negitives will go down in pitch.
-     * @return
-     */
-    public int getRelativeNote(int note, int positions, int degree) {
-	return mode.getPitch(degree + positions)+ (((degree + positions) / mode.getNumPitches()) * 12)
-		+ ((note - key) / 12) * 12 + key;
-    }
-
-    public int getRelativeNote(int note, int positions) {
-	int degree = getDegree(note);
-	if (degree == -1)
-	    return -1;
-	return getRelativeNote(note, positions, degree);
-    }
-
-    /**
-     * Get the scale degree of the current note.
-     * @param note
-     * @return
-     */
-    public int getDegree(int note) {
-	int degree = -1;
-	int octaveLimited = (note - key) % 12;
-	for (int i = 0; i < mode.getNumPitches(); i++) {
-	    if (mode.getPitch(i) == octaveLimited) {
-		degree = i;
-		break;
-	    }
-	}
-	return degree;
-    }
-
-    public int getKey() {
-	return key;
+    public int getNoteCount() {
+	return mode.getNoteCount();
     }
 
     public void setKey(int key) {
-	this.key = key % 12;
-    }
-
-    public ScaleMode getMode() {
-	return mode;
+	this.key = key%12;
     }
 
     public void setMode(ScaleMode mode) {
 	this.mode = mode;
+    }
+    
+    public int truncateDegree(int degree){
+	int val = degree % mode.getNoteCount();
+	if (val < 0)
+	    val += mode.getNoteCount();
+	return val;
     }
 }

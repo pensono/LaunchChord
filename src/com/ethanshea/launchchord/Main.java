@@ -7,7 +7,6 @@ import java.awt.event.ActionListener;
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
 import java.util.ArrayList;
-import java.util.HashMap;
 
 import javax.sound.midi.MidiDevice;
 import javax.sound.midi.MidiDevice.Info;
@@ -23,30 +22,34 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 
 public class Main {
-    private MidiDevice input;
-    private MidiDevice output;
-    private Scale scale;
-    
-    private JSlider bassNotes;
-    private JSlider bassOctave;
-    private JSlider voices;
-    
-    private HashMap<Integer, Chord> playedChords;
+    private Launchpad launchpad;
+    private HarmonicKeyboard keyboard;
+    private JComboBox key;
+    private JComboBox mode;
+    private JSlider octave;
+    private JSlider horizontal;
+    private JSlider vertical;
+    private JSlider horizontalShift;
+    private JSlider verticalShift;
 
     public static void main(String[] args) {
 	new Main().run();
     }
-    
-    public Main(){
-	scale = new Scale();
-	playedChords = new HashMap<Integer, Chord>();
-    }
+
+    public Main() {}
 
     public void run() {
+	launchpad = new Launchpad();
+
+	keyboard = new HarmonicKeyboard();
+	launchpad.addEventListener(keyboard);
+
 	JFrame frame = new JFrame("LaunchChord");
-	
+
 	Info[] devices = MidiSystem.getMidiDeviceInfo();
 	ArrayList<Info> inputs = new ArrayList<Info>();
 	ArrayList<Info> outputs = new ArrayList<Info>();
@@ -63,116 +66,114 @@ public class Main {
 	    }
 	}
 
-	//Input Selector
+	// Listener to ley the harmonic keyboard know when to change it's ways
+	KeyboardUpdator keyboardListener = new KeyboardUpdator();
+	launchpad.addEventListener(keyboardListener);
+
+	// Input Selector
 	JComboBox inputSelector = new JComboBox(inputs.toArray());
 	inputSelector.addActionListener(new InputChangeListener());
 	JPanel inputGroup = new JPanel();
-	inputGroup.add(new JLabel("Input:"),BorderLayout.WEST);
+	inputGroup.add(new JLabel("Input:"), BorderLayout.WEST);
 	inputGroup.add(inputSelector);
-	
-	//Output Selector
+
+	// Display Selector
+	JComboBox displaySelector = new JComboBox(outputs.toArray());
+	displaySelector.addActionListener(new DisplayChangeListener());
+	JPanel displayGroup = new JPanel();
+	displayGroup.add(new JLabel("Display:"), BorderLayout.WEST);
+	displayGroup.add(displaySelector);
+
+	// Output Selector
 	JComboBox outputSelector = new JComboBox(outputs.toArray());
 	outputSelector.addActionListener(new OutputChangeListener());
 	JPanel outputGroup = new JPanel();
-	outputGroup.add(new JLabel("Output:"),BorderLayout.WEST);
+	outputGroup.add(new JLabel("Output:"), BorderLayout.WEST);
 	outputGroup.add(outputSelector);
-	
-	//IO Panel
-	JPanel io = new JPanel(new GridLayout(0,2));
+
+	// IO Panel
+	JPanel io = new JPanel(new GridLayout(0, 3));
 	io.add(inputGroup);
+	io.add(displayGroup);
 	io.add(outputGroup);
 	io.setBorder(BorderFactory.createTitledBorder("Input/Output"));
-	frame.add(io,BorderLayout.NORTH);
+	frame.add(io, BorderLayout.NORTH);
 
-	// Key Selector
-	JComboBox keySelector = new JComboBox(MusicUtils.noteNames);
-	keySelector.addActionListener(new ActionListener() {
-	    public void actionPerformed(ActionEvent e) {
-		scale.setKey(((JComboBox) e.getSource()).getSelectedIndex());
-	    }
-	});
-	JPanel keySelectorGroup = new JPanel();
-	keySelectorGroup.setLayout(new GridLayout(0,2));
-	keySelectorGroup.add(new JLabel("Key: "), BorderLayout.WEST);
-	keySelectorGroup.add(keySelector);
-	
-	// Mode Selector
-	JComboBox modeSelector = new JComboBox(ScaleMode.getAllScales());
-	modeSelector.addActionListener(new ActionListener() {
-	    public void actionPerformed(ActionEvent e) {
-		scale.setMode((ScaleMode) ((JComboBox) e.getSource()).getSelectedItem());
-	    }
-	});
-	JPanel modeSelectorGroup = new JPanel();
-	modeSelectorGroup.setLayout(new GridLayout(0,2));
-	modeSelectorGroup.add(new JLabel("Mode: "), BorderLayout.WEST);
-	modeSelectorGroup.add(modeSelector);
-	
-	//Scale Selector
-	JPanel scaleSelectorSubgroup = new JPanel();
-	scaleSelectorSubgroup.setLayout(new GridLayout(2,0));
-	scaleSelectorSubgroup.setBorder(BorderFactory.createTitledBorder("Scale"));
-	scaleSelectorSubgroup.add(keySelectorGroup);
-	scaleSelectorSubgroup.add(modeSelectorGroup);
-	
-	JPanel scaleSelectorGroup = new JPanel();
-	scaleSelectorGroup.add(scaleSelectorSubgroup,BorderLayout.NORTH);
-	scaleSelectorGroup.add(new JPanel());
-	frame.add(scaleSelectorGroup,BorderLayout.EAST);
-	
-	//===Voicing controls===\\
-	JPanel bass = new JPanel();
-	bass.setBorder(BorderFactory.createTitledBorder("Bass"));
-	bass.setLayout(new GridLayout(0,2));	
+	JPanel controls = new JPanel(new GridLayout(0, 1));// Vertical
 
-	//Bass notes
-	bass.add(new JLabel("Bass Notes:"));
-	bassNotes = new JSlider(JSlider.HORIZONTAL,0,3,2);
-	bassNotes.setMajorTickSpacing(1);
-	bassNotes.setSnapToTicks(true);
-	bassNotes.setPaintLabels(true);
-	bass.add(bassNotes);
+	// ==Keyboard Layout==\\
+	JPanel keyLayout = new JPanel(new GridLayout(0, 2));
+	keyLayout.setBorder(BorderFactory.createTitledBorder("Keyboard Layout"));
 
-	//Bass Octave
-	bass.add(new JLabel("Bass Octave:"));
-	bassOctave = new JSlider(JSlider.HORIZONTAL,-3,1,-1);
-	bassOctave.setMajorTickSpacing(1);
-	bassOctave.setSnapToTicks(true);
-	bassOctave.setPaintLabels(true);
-	bass.add(bassOctave);
-	
-	//Voicing Panel
-	JPanel voicing = new JPanel();
-	voicing.setBorder(BorderFactory.createTitledBorder("Voicing"));
-	voicing.setLayout(new GridLayout(0,2));	
-	
-	//Note Number
-	voicing.add(new JLabel("Voices:"));
-	voices = new JSlider(JSlider.HORIZONTAL,0,10,4);
-	voices.setMajorTickSpacing(1);
-	voices.setSnapToTicks(true);
-	voices.setPaintLabels(true);
-	voicing.add(voices);
-	
-	JPanel mainControls = new JPanel();
-	mainControls.setLayout(new GridLayout(2,0));
-	mainControls.add(bass,BorderLayout.NORTH);
-	mainControls.add(voicing);
-	frame.add(mainControls);
-	
+	// Key
+	keyLayout.add(new JLabel("Key:"));
+	String[] keys = { "C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B" };
+	key = new JComboBox(keys);
+	key.addActionListener(keyboardListener);
+	keyLayout.add(key);
+
+	// Mode
+	keyLayout.add(new JLabel("Mode:"));
+	mode = new JComboBox(ScaleMode.values());
+	mode.addActionListener(keyboardListener);
+	keyLayout.add(mode);
+
+	// Octave
+	keyLayout.add(new JLabel("Octave:"));
+	octave = new JSlider(JSlider.HORIZONTAL, -2, 3, 0);
+	octave.setMajorTickSpacing(1);
+	octave.setSnapToTicks(true);
+	octave.setPaintLabels(true);
+	octave.addChangeListener(keyboardListener);
+	keyLayout.add(octave);
+
+	// Horizontal increment
+	keyLayout.add(new JLabel("Horizontal increment (scale degrees):"));
+	horizontal = new JSlider(JSlider.HORIZONTAL, 0, 8, 5);
+	horizontal.setMajorTickSpacing(1);
+	horizontal.setSnapToTicks(true);
+	horizontal.setPaintLabels(true);
+	horizontal.addChangeListener(keyboardListener);
+	keyLayout.add(horizontal);
+
+	// Vertical increment
+	keyLayout.add(new JLabel("Vertical increment (scale degrees):"));
+	vertical = new JSlider(JSlider.HORIZONTAL, 0, 8, 4);
+	vertical.setMajorTickSpacing(1);
+	vertical.setSnapToTicks(true);
+	vertical.setPaintLabels(true);
+	vertical.addChangeListener(keyboardListener);
+	keyLayout.add(vertical);
+
+	// Horizontal Shift
+	keyLayout.add(new JLabel("Horizontal shift:"));
+	horizontalShift = new JSlider(JSlider.HORIZONTAL, -4, 4, 0);
+	horizontalShift.setMajorTickSpacing(1);
+	horizontalShift.setSnapToTicks(true);
+	horizontalShift.setPaintLabels(true);
+	horizontalShift.addChangeListener(keyboardListener);
+	keyLayout.add(horizontalShift);
+
+	// Vertical Shift
+	keyLayout.add(new JLabel("Vertical shift:"));
+	verticalShift = new JSlider(JSlider.HORIZONTAL, -4, 4, 0);
+	verticalShift.setMajorTickSpacing(1);
+	verticalShift.setSnapToTicks(true);
+	verticalShift.setPaintLabels(true);
+	verticalShift.addChangeListener(keyboardListener);
+	keyLayout.add(verticalShift);
+
+	controls.add(keyLayout);
+	frame.add(controls);
+
 	frame.pack();
-	//frame.setResizable(false);
+	frame.setResizable(false);
 	frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 	frame.addWindowListener(new WindowListener() {
 	    public void windowOpened(WindowEvent e) {}
 
 	    public void windowClosing(WindowEvent e) {
-		if (input != null)
-		    input.close();
-		if (output != null){
-		    //TODO send out all notes off message
-		    output.close();
-		}
+		launchpad.close();
 	    }
 
 	    public void windowClosed(WindowEvent e) {}
@@ -187,39 +188,15 @@ public class Main {
 	});
 	frame.setVisible(true);
     }
-    
-    public Chord voiceChord(Chord base, int bassNotes, int bassOctave, int voices){
-	int root = base.getLowest();
-	Chord chord = new Chord();
-	for (int i=0;i>-bassNotes;i--){
-	    chord.addNote(root+((bassOctave+i)*12));
-	}
-	
-	return chord;
-    }
 
     public class MidiListener implements Receiver {
 	public void send(MidiMessage message, long timeStamp) {
 	    byte[] msg = message.getMessage();
-	    if ((message.getStatus() == ShortMessage.NOTE_OFF) || ((message.getStatus() == ShortMessage.NOTE_ON) && (msg[2] == 0))) {// Note off
-		System.out.println("Note off " + MusicUtils.getNoteName(msg[1]) + "-" + msg[2]);
-		if (playedChords.containsKey(new Integer(msg[1]))){
-		    try {
-			MusicUtils.sendChordOff(playedChords.get(new Integer(msg[1])),msg[2],output.getReceiver());
-		    } catch (MidiUnavailableException e) {
-			e.printStackTrace();
-		    }
-		    playedChords.remove(new Integer(msg[1]));
-		}
-	    } else if (message.getStatus() ==ShortMessage.NOTE_ON) {// Note on
-		System.out.println("Note on " + MusicUtils.getNoteName(msg[1]) + "-" + msg[2]);
-		Chord chord = voiceChord(scale.getDiatonicChord(msg[1]), bassNotes.getValue(), bassOctave.getValue(), voices.getValue());
-		playedChords.put(new Integer(msg[1]), chord);
-		try {
-		    MusicUtils.sendChordOn(chord,msg[2],output.getReceiver());
-		} catch (MidiUnavailableException e) {
-		    e.printStackTrace();
-		}
+	    if ((message.getStatus() == ShortMessage.NOTE_OFF)
+		    || ((message.getStatus() == ShortMessage.NOTE_ON) && (msg[2] == 0))) {// Note off
+
+	    } else if (message.getStatus() == ShortMessage.NOTE_ON) {// Note on
+
 	    } else if (message.getStatus() == ShortMessage.CONTROL_CHANGE) {// MIDI CC
 		System.out.println("CC " + msg[1] + ": " + msg[2]);
 	    } else if (message.getStatus() == ShortMessage.PITCH_BEND) {// Pitch bend
@@ -238,34 +215,69 @@ public class Main {
 	public void actionPerformed(ActionEvent e) {
 	    if (e.getSource() instanceof JComboBox) {
 		try {
-		    if (input != null) {
-			input.close();
-		    }
-		    input = MidiSystem.getMidiDevice((Info) ((JComboBox) e.getSource()).getSelectedItem());
-		    input.open();
-		    input.getTransmitter().setReceiver(new MidiListener());
+		    MidiDevice input = MidiSystem.getMidiDevice((Info) ((JComboBox) e.getSource()).getSelectedItem());
+		    launchpad.setMidiInDevice(input);
 		    System.out.println("Input device selected.");
 		} catch (MidiUnavailableException e1) {
-		    JOptionPane.showMessageDialog(null, "MIDI Device already in use.", "MIDI Device Error", JOptionPane.ERROR_MESSAGE);
+		    JOptionPane.showMessageDialog(null, "MIDI Device already in use.", "MIDI Device Error",
+			    JOptionPane.ERROR_MESSAGE);
 		}
 	    }
 	}
     }
-    
+
     public class OutputChangeListener implements ActionListener {
 	public void actionPerformed(ActionEvent e) {
 	    if (e.getSource() instanceof JComboBox) {
 		try {
-		    if (output != null) {
-			output.close();
-		    }
-		    output = MidiSystem.getMidiDevice((Info) ((JComboBox) e.getSource()).getSelectedItem());
-		    output.open();
+		    MidiDevice output = MidiSystem.getMidiDevice((Info) ((JComboBox) e.getSource()).getSelectedItem());
+		    keyboard.setOutput(output);
 		    System.out.println("Output device selected.");
 		} catch (MidiUnavailableException e1) {
-		    JOptionPane.showMessageDialog(null, "MIDI Device already in use.", "MIDI Device Error", JOptionPane.ERROR_MESSAGE);
+		    JOptionPane.showMessageDialog(null, "MIDI Device already in use.", "MIDI Device Error",
+			    JOptionPane.ERROR_MESSAGE);
 		}
 	    }
 	}
     }
+
+    public class DisplayChangeListener implements ActionListener {
+	public void actionPerformed(ActionEvent e) {
+	    if (e.getSource() instanceof JComboBox) {
+		try {
+		    launchpad.setMidiOutDevice(MidiSystem.getMidiDevice((Info) ((JComboBox) e.getSource())
+			    .getSelectedItem()));
+		    System.out.println("Display device selected.");
+		} catch (MidiUnavailableException e1) {
+		    e1.printStackTrace();
+		}
+	    }
+	}
+    }
+
+    public class KeyboardUpdator implements ActionListener, ChangeListener, LaunchEventListener {
+	public void stateChanged(ChangeEvent e) {
+	    trigger();
+	}
+
+	public void actionPerformed(ActionEvent e) {
+	    trigger();
+	}
+
+	public void trigger() {
+	    keyboard.calculateKeyboard(octave.getValue(), horizontal.getValue(), vertical.getValue(),
+		    key.getSelectedIndex(), (ScaleMode) mode.getSelectedItem(), horizontalShift.getValue(),
+		    verticalShift.getValue());
+	}
+
+	public void launchpadConnected(Launchpad launchpad) {
+	    trigger();
+	}
+
+	public void buttonPressed(Launchpad launchpad, int x, int y) {}
+
+	public void buttonReleased(Launchpad launchpad, int x, int y) {}
+
+	public void launchpadDisonnected(Launchpad launchpad) {}
+    };
 }
